@@ -39,15 +39,15 @@ def create_app():
                 )
             )
 
-        if max_price:
-            query = query.filter(Product.price <= max_price)
+        if max_price not in (None, ''):
+            query = query.filter(Product.price <= float(max_price))
 
         products = query.all()
         return jsonify([p.to_dict() for p in products])
 
     @app.route('/cart/add', methods=['POST'])
     def add_to_cart():
-        data = request.get_json()
+        data = request.get_json() or {}
 
         product_id = data.get('product_id')
         quantity = data.get('quantity', 1)
@@ -59,20 +59,42 @@ def create_app():
         if not product:
             return jsonify({"error": "Product not found"}), 404
 
-        item = CartItem(
-            product_id=product_id,
-            quantity=quantity
-        )
+        existing_item = CartItem.query.filter_by(product_id=product_id).first()
 
-        db.session.add(item)
+        if existing_item:
+            existing_item.quantity += quantity
+        else:
+            item = CartItem(
+                product_id=product_id,
+                quantity=quantity
+            )
+            db.session.add(item)
+
         db.session.commit()
-
         return jsonify({"message": "Item added to cart"})
 
     @app.route('/cart', methods=['GET'])
     def view_cart():
         items = CartItem.query.all()
         return jsonify([item.to_dict() for item in items])
+
+    @app.route('/cart/remove', methods=['POST'])
+    def remove_from_cart():
+        data = request.get_json() or {}
+        product_id = data.get('product_id')
+
+        if not product_id:
+            return jsonify({"error": "product_id is required"}), 400
+
+        item = CartItem.query.filter_by(product_id=product_id).first()
+
+        if not item:
+            return jsonify({"error": "Item not found in cart"}), 404
+
+        db.session.delete(item)
+        db.session.commit()
+
+        return jsonify({"message": "Item removed from cart"})
 
     @app.route('/checkout', methods=['POST'])
     def checkout():
@@ -88,7 +110,8 @@ def create_app():
         db.session.flush()
 
         for item in cart_items:
-            total += item.product.price * item.quantity
+            subtotal = item.product.price * item.quantity
+            total += subtotal
 
             order_item = OrderItem(
                 order_id=order.id,
@@ -99,7 +122,10 @@ def create_app():
             db.session.add(order_item)
 
         order.total_amount = total
-        CartItem.query.delete()
+
+        for item in cart_items:
+            db.session.delete(item)
+
         db.session.commit()
 
         return jsonify({

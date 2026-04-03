@@ -1,54 +1,69 @@
 body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
-    background-color: #f5f5f5;
+  font-family: Arial;
+  background: #0a0a0f;
+  color: white;
 }
 
-h1 {
-    color: #333;
+.main {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
 }
 
-h2 {
-    margin-top: 20px;
+.search-bar {
+  display: flex;
+  gap: 10px;
 }
 
-input {
-    padding: 8px;
-    margin: 5px;
-    width: 200px;
+input, button {
+  padding: 10px;
 }
 
-button {
-    padding: 8px 12px;
-    margin: 5px;
-    cursor: pointer;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
+.product-card {
+  border: 1px solid #333;
+  padding: 15px;
+  margin: 10px 0;
+  position: relative;
 }
 
-button:hover {
-    background-color: #0056b3;
+.product-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* FIX */
 }
 
-#results, #cart, #orderStatus {
-    margin-top: 15px;
-    padding: 10px;
-    background: white;
-    border-radius: 5px;
+.panel {
+  display: none;
 }
 
-.product {
-    border-bottom: 1px solid #ddd;
-    padding: 10px 0;
+.panel.active {
+  display: block;
 }
 
-.product:last-child {
-    border-bottom: none;
+.tab.active {
+  background: #2f6fed;
+  color: white;
 }
 
-#orderIdInput {
-    width: 220px;
-    padding: 8px;
+.btn-add {
+  margin-top: 10px;
+  cursor: pointer;
+  position: relative;
+  z-index: 5;
+}
+
+.cart-item {
+  border: 1px solid #444;
+  padding: 10px;
+  margin: 10px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.btn-delete {
+  background: red;
+  color: white;
+  border: none;
+  cursor: pointer;
 }
