@@ -1,7 +1,9 @@
-from flask import Flask
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+from sqlalchemy import or_
 from config import Config
-from models import db
+from models import db, Product, CartItem, Order, OrderItem
+
 
 def create_app():
     app = Flask(__name__)
@@ -14,7 +16,109 @@ def create_app():
     def home():
         return {"message": "Agentic Commerce Backend is running"}
 
+    @app.route('/products', methods=['GET'])
+    def get_products():
+        products = Product.query.all()
+        return jsonify([p.to_dict() for p in products])
+
+    @app.route('/search', methods=['POST'])
+    def search_products():
+        data = request.get_json() or {}
+
+        keyword = data.get('keyword', '').strip()
+        max_price = data.get('max_price')
+
+        query = Product.query
+
+        if keyword:
+            query = query.filter(
+                or_(
+                    Product.name.ilike(f"%{keyword}%"),
+                    Product.category.ilike(f"%{keyword}%"),
+                    Product.description.ilike(f"%{keyword}%")
+                )
+            )
+
+        if max_price:
+            query = query.filter(Product.price <= max_price)
+
+        products = query.all()
+        return jsonify([p.to_dict() for p in products])
+
+    @app.route('/cart/add', methods=['POST'])
+    def add_to_cart():
+        data = request.get_json()
+
+        product_id = data.get('product_id')
+        quantity = data.get('quantity', 1)
+
+        if not product_id:
+            return jsonify({"error": "product_id is required"}), 400
+
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({"error": "Product not found"}), 404
+
+        item = CartItem(
+            product_id=product_id,
+            quantity=quantity
+        )
+
+        db.session.add(item)
+        db.session.commit()
+
+        return jsonify({"message": "Item added to cart"})
+
+    @app.route('/cart', methods=['GET'])
+    def view_cart():
+        items = CartItem.query.all()
+        return jsonify([item.to_dict() for item in items])
+
+    @app.route('/checkout', methods=['POST'])
+    def checkout():
+        cart_items = CartItem.query.all()
+
+        if not cart_items:
+            return jsonify({"message": "Cart is empty"}), 400
+
+        total = 0
+
+        order = Order(total_amount=0, status="Placed")
+        db.session.add(order)
+        db.session.flush()
+
+        for item in cart_items:
+            total += item.product.price * item.quantity
+
+            order_item = OrderItem(
+                order_id=order.id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                price=item.product.price
+            )
+            db.session.add(order_item)
+
+        order.total_amount = total
+        CartItem.query.delete()
+        db.session.commit()
+
+        return jsonify({
+            "message": "Order placed successfully",
+            "order_id": order.id,
+            "total_amount": total
+        })
+
+    @app.route('/order/<int:order_id>', methods=['GET'])
+    def track_order(order_id):
+        order = Order.query.get(order_id)
+
+        if not order:
+            return jsonify({"error": "Order not found"}), 404
+
+        return jsonify(order.to_dict())
+
     return app
+
 
 app = create_app()
 

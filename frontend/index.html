@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Agentic Commerce</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Agentic Commerce Platform</h1>
+
+  <input type="text" id="searchInput" placeholder="Search product">
+  <button onclick="searchProducts()">Search</button>
+
+  <div id="results"></div>
+  
+  <h2>Cart</h2>
+  <button onclick="viewCart()">View Cart</button>
+  <div id="cart"></div>
+
+  <button onclick="checkout()">Checkout</button>
+
+  <h2>Track Order</h2>
+  <input type="number" id="orderIdInput" placeholder="Enter order ID" />
+  <button onclick="trackOrder()">Track Order</button>
+  <div id="orderStatus"></div>
+
+
+  <script src="script.js"></script>
+</body>
+</html>
