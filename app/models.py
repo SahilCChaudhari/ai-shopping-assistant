@@ -3,15 +3,20 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+
 class Product(db.Model):
     __tablename__ = 'products'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    category = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(100), nullable=False, default="Web")
     price = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text, nullable=True)
     stock = db.Column(db.Integer, default=0)
+
+    # New fields for web products
+    image = db.Column(db.Text, nullable=True)
+    link = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
@@ -20,7 +25,9 @@ class Product(db.Model):
             "category": self.category,
             "price": self.price,
             "description": self.description,
-            "stock": self.stock
+            "stock": self.stock,
+            "image": self.image,
+            "link": self.link
         }
 
 

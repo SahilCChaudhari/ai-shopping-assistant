@@ -1,12 +1,15 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from sqlalchemy import or_
 from config import Config
 from models import db, Product, CartItem, Order, OrderItem
+import os
+import requests
 
 
 def create_app():
     app = Flask(__name__, template_folder="template", static_folder="static")
+    # If your folder name is "templates", change "template" to "templates"
+
     app.config.from_object(Config)
 
     CORS(app)
@@ -16,34 +19,55 @@ def create_app():
     def home():
         return render_template('index.html')
 
-    @app.route('/products', methods=['GET'])
-    def get_products():
-        products = Product.query.all()
-        return jsonify([p.to_dict() for p in products])
-
-    @app.route('/search', methods=['POST'])
-    def search_products():
+    @app.route('/web-search', methods=['POST'])
+    def web_search():
         data = request.get_json() or {}
-
         keyword = data.get('keyword', '').strip()
         max_price = data.get('max_price')
 
-        query = Product.query
+        if not keyword:
+            return jsonify({"error": "Keyword required"}), 400
 
-        if keyword:
-            query = query.filter(
-                or_(
-                    Product.name.ilike(f"%{keyword}%"),
-                    Product.category.ilike(f"%{keyword}%"),
-                    Product.description.ilike(f"%{keyword}%")
-                )
-            )
+        api_key = os.getenv("SERPAPI_KEY")
+        if not api_key:
+            return jsonify({"error": "SERPAPI_KEY not set"}), 500
 
-        if max_price not in (None, ''):
-            query = query.filter(Product.price <= float(max_price))
+        params = {
+            "engine": "google_shopping",
+            "q": keyword,
+            "api_key": api_key
+        }
 
-        products = query.all()
-        return jsonify([p.to_dict() for p in products])
+        try:
+            response = requests.get("https://serpapi.com/search", params=params, timeout=20)
+            response.raise_for_status()
+            results = response.json()
+
+            products = []
+
+            for item in results.get("shopping_results", []):
+                extracted_price = item.get("extracted_price")
+
+                if max_price not in (None, '') and extracted_price is not None:
+                    try:
+                        if float(extracted_price) > float(max_price):
+                            continue
+                    except ValueError:
+                        pass
+
+                products.append({
+                    "name": item.get("title", "No title"),
+                    "price": item.get("price", "N/A"),
+                    "image": item.get("thumbnail"),
+                    "link": item.get("product_link") or item.get("link"),
+                    "source": item.get("source", "Web"),
+                    "description": item.get("snippet", "")
+                })
+
+            return jsonify(products)
+
+        except requests.RequestException as e:
+            return jsonify({"error": f"Web search failed: {str(e)}"}), 500
 
     @app.route('/cart/add', methods=['POST'])
     def add_to_cart():
@@ -52,26 +76,71 @@ def create_app():
         product_id = data.get('product_id')
         quantity = data.get('quantity', 1)
 
-        if not product_id:
-            return jsonify({"error": "product_id is required"}), 400
+        if product_id:
+            product = Product.query.get(product_id)
+            if not product:
+                return jsonify({"error": "Product not found"}), 404
 
-        product = Product.query.get(product_id)
+            existing_item = CartItem.query.filter_by(product_id=product_id).first()
+
+            if existing_item:
+                existing_item.quantity += quantity
+            else:
+                item = CartItem(product_id=product_id, quantity=quantity)
+                db.session.add(item)
+
+            db.session.commit()
+            return jsonify({"message": "Item added to cart"})
+
+        web_name = data.get("name")
+        web_price = data.get("price")
+        web_description = data.get("description", "")
+        web_category = data.get("category", "Web")
+        web_image = data.get("image")
+        web_link = data.get("link")
+
+        if not web_name:
+            return jsonify({"error": "Product info is required"}), 400
+
+        product = Product.query.filter_by(name=web_name).first()
+
         if not product:
-            return jsonify({"error": "Product not found"}), 404
+            numeric_price = 0.0
 
-        existing_item = CartItem.query.filter_by(product_id=product_id).first()
+            if isinstance(web_price, str):
+                cleaned = web_price.replace("$", "").replace(",", "").strip()
+                try:
+                    numeric_price = float(cleaned)
+                except ValueError:
+                    numeric_price = 0.0
+            elif isinstance(web_price, (int, float)):
+                numeric_price = float(web_price)
+
+            product = Product(
+                name=web_name,
+                category=web_category,
+                price=numeric_price,
+                description=web_description
+            )
+
+            if hasattr(product, "image"):
+                product.image = web_image
+            if hasattr(product, "link"):
+                product.link = web_link
+
+            db.session.add(product)
+            db.session.flush()
+
+        existing_item = CartItem.query.filter_by(product_id=product.id).first()
 
         if existing_item:
             existing_item.quantity += quantity
         else:
-            item = CartItem(
-                product_id=product_id,
-                quantity=quantity
-            )
+            item = CartItem(product_id=product.id, quantity=quantity)
             db.session.add(item)
 
         db.session.commit()
-        return jsonify({"message": "Item added to cart"})
+        return jsonify({"message": "Web item added to cart"})
 
     @app.route('/cart', methods=['GET'])
     def view_cart():

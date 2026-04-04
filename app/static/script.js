@@ -19,7 +19,84 @@ function switchTab(name) {
   if (panel) panel.classList.add("active");
 }
 
-async function searchProducts() {
+function renderWebProducts(data) {
+  const resultsDiv = document.getElementById("results");
+  resultsDiv.innerHTML = "";
+
+  if (!Array.isArray(data) || data.length === 0) {
+    resultsDiv.innerHTML = `<p>No web results found</p>`;
+    return;
+  }
+
+  data.forEach(product => {
+    const card = document.createElement("div");
+    card.className = "product-card";
+
+    card.innerHTML = `
+      <h3>${product.name || "No title"}</h3>
+      <p><b>Source:</b> ${product.source || "Web"}</p>
+      <p><b>Price:</b> ${product.price || "N/A"}</p>
+      <p>${product.description || ""}</p>
+      ${product.image ? `<img src="${product.image}" width="120" alt="product image">` : ""}
+      <br/>
+      ${product.link ? `<a href="${product.link}" target="_blank">View Product</a>` : ""}
+    `;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-add";
+    btn.textContent = "Add to Cart";
+
+    btn.addEventListener("click", async () => {
+      btn.textContent = "Adding...";
+      btn.disabled = true;
+
+      try {
+        const response = await fetch(`${BASE_URL}/cart/add`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: product.name,
+            price: product.price,
+            description: product.description,
+            category: product.source || "Web",
+            image: product.image,
+            link: product.link,
+            quantity: 1
+          })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          alert(result.error || "Failed to add item");
+          btn.textContent = "Add to Cart";
+          btn.disabled = false;
+          return;
+        }
+
+        btn.textContent = "✓ Added!";
+        updateCartCount();
+
+        setTimeout(() => {
+          btn.textContent = "Add to Cart";
+          btn.disabled = false;
+        }, 1500);
+      } catch (error) {
+        alert("Error adding to cart");
+        btn.textContent = "Add to Cart";
+        btn.disabled = false;
+      }
+    });
+
+    card.appendChild(btn);
+    resultsDiv.appendChild(card);
+  });
+
+  switchTab("products");
+}
+
+async function searchWebProducts() {
   const keyword = document.getElementById("searchInput").value.trim();
   const maxPrice = document.getElementById("maxPrice").value;
   const resultsDiv = document.getElementById("results");
@@ -28,85 +105,41 @@ async function searchProducts() {
     const body = { keyword };
     if (maxPrice) body.max_price = parseFloat(maxPrice);
 
-    const response = await fetch(`${BASE_URL}/search`, {
+    const response = await fetch(`${BASE_URL}/web-search`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify(body)
-    });
-
-    const data = await response.json();
-    resultsDiv.innerHTML = "";
-
-    if (!data.length) {
-      resultsDiv.innerHTML = `<p>No products found</p>`;
-      return;
-    }
-
-    data.forEach(product => {
-      const card = document.createElement("div");
-      card.className = "product-card";
-
-      card.innerHTML = `
-        <h3>${product.name}</h3>
-        <p><b>Category:</b> ${product.category}</p>
-        <p><b>Price:</b> $${product.price}</p>
-        <p>${product.description}</p>
-      `;
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn-add";
-      btn.textContent = "Add to Cart";
-
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        btn.textContent = "Adding...";
-        btn.disabled = true;
-        await addToCart(product.id, btn);
-      });
-
-      card.appendChild(btn);
-      resultsDiv.appendChild(card);
-    });
-
-    switchTab("products");
-  } catch (error) {
-    resultsDiv.innerHTML = `<p>Server error</p>`;
-  }
-}
-
-async function addToCart(productId, btn) {
-  try {
-    const response = await fetch(`${BASE_URL}/cart/add`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product_id: productId, quantity: 1 })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      alert(data.error || "Failed to add item");
-      btn.textContent = "Add to Cart";
-      btn.disabled = false;
+      resultsDiv.innerHTML = `<p>${data.error || "Web search failed"}</p>`;
       return;
     }
 
-    btn.textContent = "✓ Added!";
-    btn.style.background = "green";
-
-    setTimeout(() => {
-      btn.textContent = "Add to Cart";
-      btn.style.background = "";
-      btn.disabled = false;
-    }, 1500);
-
-    switchTab("products");
+    renderWebProducts(data);
   } catch (error) {
-    alert("Error adding to cart");
-    btn.textContent = "Add to Cart";
-    btn.disabled = false;
+    console.error("Web search error:", error);
+    resultsDiv.innerHTML = `<p>Web search failed</p>`;
+  }
+}
+
+async function updateCartCount() {
+  try {
+    const response = await fetch(`${BASE_URL}/cart`);
+    const data = await response.json();
+
+    let count = 0;
+    data.forEach(item => {
+      count += item.quantity;
+    });
+
+    document.getElementById("cartCount").textContent = count;
+  } catch (error) {
+    console.error("Failed to update cart count", error);
   }
 }
 
@@ -121,6 +154,7 @@ async function viewCart() {
 
     if (!data.length) {
       cartDiv.innerHTML = `<p>Cart is empty</p>`;
+      updateCartCount();
       switchTab("cart");
       return;
     }
@@ -136,8 +170,12 @@ async function viewCart() {
       card.innerHTML = `
         <div>
           <h3>${item.product.name}</h3>
-          <p>Quantity: ${item.quantity}</p>
-          <p>Price: $${item.product.price}</p>
+          <p><b>Category:</b> ${item.product.category || "Web"}</p>
+          <p><b>Quantity:</b> ${item.quantity}</p>
+          <p><b>Price:</b> $${item.product.price}</p>
+          <p>${item.product.description || ""}</p>
+          ${item.product.image ? `<img src="${item.product.image}" width="120" alt="product image">` : ""}
+          ${item.product.link ? `<p><a href="${item.product.link}" target="_blank">View Product</a></p>` : ""}
         </div>
       `;
 
@@ -168,6 +206,7 @@ async function viewCart() {
     summary.querySelector("#checkoutBtn").addEventListener("click", checkout);
     cartDiv.appendChild(summary);
 
+    updateCartCount();
     switchTab("cart");
   } catch (error) {
     cartDiv.innerHTML = `<p>Failed to load cart</p>`;
@@ -190,6 +229,7 @@ async function removeFromCart(productId) {
     }
 
     await viewCart();
+    updateCartCount();
     switchTab("cart");
   } catch (error) {
     alert("Error removing item");
@@ -211,6 +251,7 @@ async function checkout() {
 
     alert(`✅ Order placed! Your Order ID is: ${data.order_id}`);
     document.getElementById("orderIdInput").value = data.order_id;
+    updateCartCount();
     switchTab("track");
   } catch (error) {
     alert("Checkout failed");
@@ -252,30 +293,22 @@ async function trackOrder() {
 
 window.onload = function () {
   switchTab("products");
+  updateCartCount();
 };
-// Voice Search
+
 function startVoiceSearch() {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "en-US";
+  recognition.start();
 
-    recognition.lang = "en-US";
+  recognition.onresult = function(event) {
+    const speechResult = event.results[0][0].transcript;
+    document.getElementById("searchInput").value = speechResult;
+    searchWebProducts();
+  };
 
-    recognition.start();
-
-    recognition.onresult = function(event) {
-
-        const speechResult = event.results[0][0].transcript;
-
-        console.log("Voice command:", speechResult);
-
-        // Put speech into search box
-        document.getElementById("searchInput").value = speechResult;
-
-        // Automatically trigger search
-        searchProducts();
-    };
-
-    recognition.onerror = function(event) {
-        console.error("Voice recognition error", event);
-    };
+  recognition.onerror = function(event) {
+    console.error("Voice recognition error", event);
+  };
 }
