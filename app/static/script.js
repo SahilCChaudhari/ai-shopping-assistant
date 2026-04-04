@@ -253,3 +253,29 @@ async function trackOrder() {
 window.onload = function () {
   switchTab("products");
 };
+// Voice Search
+function startVoiceSearch() {
+
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+
+    recognition.lang = "en-US";
+
+    recognition.start();
+
+    recognition.onresult = function(event) {
+
+        const speechResult = event.results[0][0].transcript;
+
+        console.log("Voice command:", speechResult);
+
+        // Put speech into search box
+        document.getElementById("searchInput").value = speechResult;
+
+        // Automatically trigger search
+        searchProducts();
+    };
+
+    recognition.onerror = function(event) {
+        console.error("Voice recognition error", event);
+    };
+}
