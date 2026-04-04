@@ -6,7 +6,7 @@ from models import db, Product, CartItem, Order, OrderItem
 
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.from_object(Config)
 
     CORS(app)
@@ -14,7 +14,7 @@ def create_app():
 
     @app.route('/')
     def home():
-        return {"message": "Agentic Commerce Backend is running"}
+        return render_template('index.html')
 
     @app.route('/products', methods=['GET'])
     def get_products():
