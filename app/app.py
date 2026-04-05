@@ -8,28 +8,35 @@ import requests
 
 
 def create_app():
-    app = Flask(__name__, template_folder="template", static_folder="static")
-    # If your folder name is "templates", change "template" to "templates"
 
+    app = Flask(__name__, template_folder="template", static_folder="static")
     app.config.from_object(Config)
 
     CORS(app)
     db.init_app(app)
 
+    # ---------------- HOME ----------------
+
     @app.route('/')
     def home():
         return render_template('index.html')
 
+    # ---------------- WEB SEARCH ----------------
+
     @app.route('/web-search', methods=['POST'])
     def web_search():
+
         data = request.get_json() or {}
+
         keyword = data.get('keyword', '').strip()
+        min_price = data.get('min_price')
         max_price = data.get('max_price')
 
         if not keyword:
             return jsonify({"error": "Keyword required"}), 400
 
         api_key = os.getenv("SERPAPI_KEY")
+
         if not api_key:
             return jsonify({"error": "SERPAPI_KEY not set"}), 500
 
@@ -40,25 +47,36 @@ def create_app():
         }
 
         try:
-            response = requests.get("https://serpapi.com/search", params=params, timeout=20)
-            response.raise_for_status()
+
+            response = requests.get(
+                "https://serpapi.com/search",
+                params=params
+            )
+
             results = response.json()
 
             products = []
 
             for item in results.get("shopping_results", []):
+
                 extracted_price = item.get("extracted_price")
 
-                if max_price not in (None, '') and extracted_price is not None:
+                if extracted_price:
                     try:
-                        if float(extracted_price) > float(max_price):
+                        price = float(extracted_price)
+
+                        if min_price and price < float(min_price):
                             continue
+
+                        if max_price and price > float(max_price):
+                            continue
+
                     except ValueError:
-                        pass
+                        continue
 
                 products.append({
-                    "name": item.get("title", "No title"),
-                    "price": item.get("price", "N/A"),
+                    "name": item.get("title"),
+                    "price": item.get("price"),
                     "image": item.get("thumbnail"),
                     "link": item.get("product_link") or item.get("link"),
                     "source": item.get("source", "Web"),
@@ -67,31 +85,80 @@ def create_app():
 
             return jsonify(products)
 
-        except requests.RequestException as e:
-            return jsonify({"error": f"Web search failed: {str(e)}"}), 500
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # ---------------- AI SEARCH ----------------
+
+    @app.route('/ai-search', methods=['POST'])
+    def ai_search():
+
+        data = request.get_json() or {}
+        user_query = data.get("query")
+
+        if not user_query:
+            return jsonify({"error": "Query required"}), 400
+
+        parsed = parse_query(user_query)
+
+        keyword = parsed.get("search_query", user_query)
+        min_price = parsed.get("min_price")
+        max_price = parsed.get("max_price")
+
+        params = {
+            "engine": "google_shopping",
+            "q": keyword,
+            "api_key": os.getenv("SERPAPI_KEY")
+        }
+
+        try:
+
+            response = requests.get(
+                "https://serpapi.com/search",
+                params=params
+            )
+
+            results = response.json()
+
+            products = []
+
+            for item in results.get("shopping_results", []):
+
+                extracted_price = item.get("extracted_price")
+
+                if extracted_price:
+                    try:
+                        price = float(extracted_price)
+
+                        if min_price and price < float(min_price):
+                            continue
+
+                        if max_price and price > float(max_price):
+                            continue
+
+                    except ValueError:
+                        continue
+
+                products.append({
+                    "name": item.get("title"),
+                    "price": item.get("price"),
+                    "image": item.get("thumbnail"),
+                    "link": item.get("product_link") or item.get("link"),
+                    "source": item.get("source", "Web"),
+                    "description": item.get("snippet", "")
+                })
+
+            return jsonify(products)
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # ---------------- CART ----------------
 
     @app.route('/cart/add', methods=['POST'])
     def add_to_cart():
+
         data = request.get_json() or {}
-
-        product_id = data.get('product_id')
-        quantity = data.get('quantity', 1)
-
-        if product_id:
-            product = Product.query.get(product_id)
-            if not product:
-                return jsonify({"error": "Product not found"}), 404
-
-            existing_item = CartItem.query.filter_by(product_id=product_id).first()
-
-            if existing_item:
-                existing_item.quantity += quantity
-            else:
-                item = CartItem(product_id=product_id, quantity=quantity)
-                db.session.add(item)
-
-            db.session.commit()
-            return jsonify({"message": "Item added to cart"})
 
         web_name = data.get("name")
         web_price = data.get("price")
@@ -100,22 +167,23 @@ def create_app():
         web_image = data.get("image")
         web_link = data.get("link")
 
+        quantity = data.get("quantity", 1)
+
         if not web_name:
-            return jsonify({"error": "Product info is required"}), 400
+            return jsonify({"error": "Product info required"}), 400
 
         product = Product.query.filter_by(name=web_name).first()
 
         if not product:
-            numeric_price = 0.0
 
-            if isinstance(web_price, str):
-                cleaned = web_price.replace("$", "").replace(",", "").strip()
-                try:
-                    numeric_price = float(cleaned)
-                except ValueError:
-                    numeric_price = 0.0
-            elif isinstance(web_price, (int, float)):
-                numeric_price = float(web_price)
+            numeric_price = 0
+
+            try:
+                numeric_price = float(
+                    str(web_price).replace("$", "").replace(",", "")
+                )
+            except:
+                pass
 
             product = Product(
                 name=web_name,
@@ -123,11 +191,6 @@ def create_app():
                 price=numeric_price,
                 description=web_description
             )
-
-            if hasattr(product, "image"):
-                product.image = web_image
-            if hasattr(product, "link"):
-                product.link = web_link
 
             db.session.add(product)
             db.session.flush()
@@ -141,72 +204,37 @@ def create_app():
             db.session.add(item)
 
         db.session.commit()
-        return jsonify({"message": "Web item added to cart"})
+
+        return jsonify({"message": "Item added to cart"})
 
     @app.route('/cart', methods=['GET'])
     def view_cart():
+
         items = CartItem.query.all()
+
         return jsonify([item.to_dict() for item in items])
 
     @app.route('/cart/remove', methods=['POST'])
     def remove_from_cart():
+
         data = request.get_json() or {}
         product_id = data.get('product_id')
-
-        if not product_id:
-            return jsonify({"error": "product_id is required"}), 400
 
         item = CartItem.query.filter_by(product_id=product_id).first()
 
         if not item:
-            return jsonify({"error": "Item not found in cart"}), 404
+            return jsonify({"error": "Item not found"}), 404
 
         db.session.delete(item)
         db.session.commit()
 
         return jsonify({"message": "Item removed from cart"})
 
-    @app.route('/ai-search', methods=['POST'])
-    def ai_search():
-        data = request.get_json()
-    user_query = data.get("query")
-
-    if not user_query:
-        return jsonify({"error": "Query required"}), 400
-
-    # Claude understands the search query
-    parsed = parse_query(user_query)
-
-    keyword = parsed.get("search_query", user_query)
-
-    params = {
-        "engine": "google_shopping",
-        "q": keyword,
-        "api_key": os.getenv("SERPAPI_KEY")
-    }
-
-    response = requests.get(
-        "https://serpapi.com/search",
-        params=params
-    )
-
-    results = response.json()
-
-    products = []
-
-    for item in results.get("shopping_results", []):
-        products.append({
-            "name": item.get("title"),
-            "price": item.get("price"),
-            "image": item.get("thumbnail"),
-            "link": item.get("link"),
-            "source": "Web"
-        })
-
-    return jsonify(products)
+    # ---------------- CHECKOUT ----------------
 
     @app.route('/checkout', methods=['POST'])
     def checkout():
+
         cart_items = CartItem.query.all()
 
         if not cart_items:
@@ -219,6 +247,7 @@ def create_app():
         db.session.flush()
 
         for item in cart_items:
+
             subtotal = item.product.price * item.quantity
             total += subtotal
 
@@ -228,6 +257,7 @@ def create_app():
                 quantity=item.quantity,
                 price=item.product.price
             )
+
             db.session.add(order_item)
 
         order.total_amount = total
@@ -243,8 +273,11 @@ def create_app():
             "total_amount": total
         })
 
+    # ---------------- ORDER TRACKING ----------------
+
     @app.route('/order/<int:order_id>', methods=['GET'])
     def track_order(order_id):
+
         order = Order.query.get(order_id)
 
         if not order:
@@ -257,5 +290,5 @@ def create_app():
 
 app = create_app()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)

@@ -1,10 +1,9 @@
 import os
 import json
-import anthropic
+from openai import OpenAI
 
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
-)
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def parse_query(user_query):
 
@@ -22,19 +21,33 @@ Format:
 {{
  "search_query": "",
  "product_type": "",
+ "min_price": null,
  "max_price": null
 }}
 """
 
-    message = client.messages.create(
-        model="claude-3-haiku-20240307",
-        max_tokens=200,
-        temperature=0,
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
         messages=[
+            {"role": "system", "content": "You extract shopping search parameters."},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        temperature=0
     )
 
-    text = message.content[0].text
+    text = response.choices[0].message.content.strip()
 
-    return json.loads(text)
+    try:
+        parsed = json.loads(text)
+    except:
+        parsed = {
+            "search_query": user_query,
+            "product_type": "",
+            "min_price": None,
+            "max_price": None
+        }
+
+    print("OpenAI received query:", user_query)
+    print("OpenAI parsed result:", parsed)
+
+    return parsed
