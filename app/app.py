@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from config import Config
 from models import db, Product, CartItem, Order, OrderItem
+from ai_search import parse_query
 import os
 import requests
 
@@ -164,6 +165,45 @@ def create_app():
         db.session.commit()
 
         return jsonify({"message": "Item removed from cart"})
+
+    @app.route('/ai-search', methods=['POST'])
+    def ai_search():
+        data = request.get_json()
+    user_query = data.get("query")
+
+    if not user_query:
+        return jsonify({"error": "Query required"}), 400
+
+    # Claude understands the search query
+    parsed = parse_query(user_query)
+
+    keyword = parsed.get("search_query", user_query)
+
+    params = {
+        "engine": "google_shopping",
+        "q": keyword,
+        "api_key": os.getenv("SERPAPI_KEY")
+    }
+
+    response = requests.get(
+        "https://serpapi.com/search",
+        params=params
+    )
+
+    results = response.json()
+
+    products = []
+
+    for item in results.get("shopping_results", []):
+        products.append({
+            "name": item.get("title"),
+            "price": item.get("price"),
+            "image": item.get("thumbnail"),
+            "link": item.get("link"),
+            "source": "Web"
+        })
+
+    return jsonify(products)
 
     @app.route('/checkout', methods=['POST'])
     def checkout():
