@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from config import Config
 from models import db, Product, CartItem, Order, OrderItem
-from ai_search import parse_query, compare_with_ai
+from ai_search import parse_query, compare_with_ai, parse_product_image
 import os
 import requests
 
@@ -307,6 +307,49 @@ def create_app():
                 "best_product": best_product,
                 "total_found": len(products),
                 "parsed_filters": parsed
+            })
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route('/image-search', methods=['POST'])
+    def image_search():
+        if "image" not in request.files:
+            return jsonify({"error": "Image file is required"}), 400
+
+        image_file = request.files["image"]
+
+        if not image_file or image_file.filename == "":
+            return jsonify({"error": "Image file is required"}), 400
+
+        api_key = os.getenv("SERPAPI_KEY")
+        if not api_key:
+            return jsonify({"error": "SERPAPI_KEY not set"}), 500
+
+        try:
+            image_bytes = image_file.read()
+            mime_type = image_file.mimetype or "image/jpeg"
+
+            parsed = parse_product_image(image_bytes, mime_type)
+            keyword = parsed.get("search_query", "").strip()
+
+            if not keyword:
+                return jsonify({"error": "Could not detect product from image"}), 400
+
+            products = fetch_filtered_products(
+                keyword=keyword,
+                api_key=api_key,
+                parsed=None,
+                limit=20
+            )
+
+            best_product = find_best_product(products, keyword, parsed)
+
+            return jsonify({
+                "products": products,
+                "best_product": best_product,
+                "total_found": len(products),
+                "parsed_image": parsed
             })
 
         except Exception as e:

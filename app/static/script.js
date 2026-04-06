@@ -1,6 +1,8 @@
 const BASE_URL = "";
 let activeTab = "products";
 let compareList = [];
+let lastResultsData = null;
+let selectedImageFile = null;
 
 function switchTab(name) {
     activeTab = name;
@@ -18,6 +20,25 @@ function switchTab(name) {
 
     if (tabBtn) tabBtn.classList.add("active");
     if (panel) panel.classList.add("active");
+}
+
+function toggleImageSearch() {
+    const section = document.getElementById("imageSearchSection");
+    const btn = document.getElementById("cameraToggleBtn");
+
+    if (!section || !btn) return;
+
+    const isHidden = section.style.display === "none" || section.style.display === "";
+
+    if (isHidden) {
+        section.style.display = "block";
+        btn.style.background = "#2f6fed";
+        btn.style.color = "white";
+    } else {
+        section.style.display = "none";
+        btn.style.background = "";
+        btn.style.color = "";
+    }
 }
 
 function getProductKey(product) {
@@ -41,8 +62,6 @@ function toggleCompareProduct(product) {
     updateCompareBar();
     rerenderCurrentResults();
 }
-
-let lastResultsData = null;
 
 function rerenderCurrentResults() {
     if (lastResultsData) {
@@ -111,13 +130,13 @@ function renderComparisonResult(data) {
     box.style.padding = "20px";
     box.style.marginBottom = "20px";
 
-    const productLines = (data.products || [])
-        .map((p, index) => `<p><b>Product ${index + 1}:</b> ${p.name}</p>`)
-        .join("");
+    const productsHtml = (data.products || []).map((product, index) => `
+        <p><b>Product ${index + 1}:</b> ${product.name}</p>
+    `).join("");
 
     box.innerHTML = `
         <h2>AI Product Comparison</h2>
-        ${productLines}
+        ${productsHtml}
         <hr/>
         <p style="white-space: pre-wrap;">${data.comparison || "No comparison available."}</p>
     `;
@@ -173,6 +192,24 @@ function renderBestProduct(bestProduct) {
             ${bestProduct.image ? `<img src="${bestProduct.image}" width="120" alt="product image">` : ""}
             <br/>
             ${bestProduct.link ? `<a href="${bestProduct.link}" target="_blank">View Product</a>` : ""}
+        </div>
+    `;
+}
+
+function renderImageSearchSummary(data) {
+    if (!data.parsed_image) return "";
+
+    const parsed = data.parsed_image;
+
+    return `
+        <div class="product-card" style="border: 1px solid #4f7cff; padding: 16px; margin-bottom: 20px;">
+            <h3>Image Search Detection</h3>
+            <p><b>Search Query:</b> ${parsed.search_query || "N/A"}</p>
+            <p><b>Brand:</b> ${parsed.brand || "Unknown"}</p>
+            <p><b>Product Type:</b> ${parsed.product_type || "Unknown"}</p>
+            <p><b>Color:</b> ${parsed.color || "Unknown"}</p>
+            <p><b>Style:</b> ${parsed.style || "Unknown"}</p>
+            <p><b>Material:</b> ${parsed.material || "Unknown"}</p>
         </div>
     `;
 }
@@ -263,6 +300,10 @@ function renderWebProducts(data) {
         return;
     }
 
+    if (data.parsed_image) {
+        resultsDiv.innerHTML += renderImageSearchSummary(data);
+    }
+
     if (bestProduct) {
         resultsDiv.innerHTML += renderBestProduct(bestProduct);
     }
@@ -316,6 +357,92 @@ async function searchWebProducts() {
     } catch (error) {
         console.error("AI search error:", error);
         resultsDiv.innerHTML = `<p>AI search failed</p>`;
+    }
+}
+
+function setupImageDropZone() {
+    const dropZone = document.getElementById("imageDropZone");
+    const imageInput = document.getElementById("imageInput");
+    const imagePreview = document.getElementById("imagePreview");
+
+    if (!dropZone || !imageInput || !imagePreview) {
+        return;
+    }
+
+    dropZone.addEventListener("click", () => imageInput.click());
+
+    imageInput.addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            handleSelectedImage(file);
+        }
+    });
+
+    dropZone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropZone.style.borderColor = "#4f7cff";
+    });
+
+    dropZone.addEventListener("dragleave", () => {
+        dropZone.style.borderColor = "#666";
+    });
+
+    dropZone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropZone.style.borderColor = "#666";
+
+        const file = event.dataTransfer.files[0];
+        if (file) {
+            handleSelectedImage(file);
+        }
+    });
+
+    function handleSelectedImage(file) {
+        selectedImageFile = file;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            imagePreview.innerHTML = `
+                <p><b>Selected image:</b> ${file.name}</p>
+                <img src="${e.target.result}" alt="Preview" style="max-width: 220px; border-radius: 8px; margin-top: 10px;" />
+            `;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+async function findSimilarProductsFromImage() {
+    const resultsDiv = document.getElementById("results");
+
+    if (!selectedImageFile) {
+        alert("Please drag and drop or choose an image first.");
+        return;
+    }
+
+    compareList = [];
+    clearComparisonResult();
+    resultsDiv.innerHTML = `<p>Analyzing image and finding similar products...</p>`;
+
+    try {
+        const formData = new FormData();
+        formData.append("image", selectedImageFile);
+
+        const response = await fetch(`${BASE_URL}/image-search`, {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            resultsDiv.innerHTML = `<p>${data.error || "Image search failed"}</p>`;
+            return;
+        }
+
+        renderWebProducts(data);
+    } catch (error) {
+        console.error("Image search error:", error);
+        resultsDiv.innerHTML = `<p>Image search failed</p>`;
     }
 }
 
@@ -484,6 +611,7 @@ async function trackOrder() {
 window.onload = function () {
     switchTab("products");
     updateCartCount();
+    setupImageDropZone();
 };
 
 function startVoiceSearch() {

@@ -13,6 +13,8 @@ body {
 .search-bar {
   display: flex;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 input, button {
@@ -30,7 +32,7 @@ input, button {
   content: '';
   position: absolute;
   inset: 0;
-  pointer-events: none; /* FIX */
+  pointer-events: none;
 }
 
 .panel {
@@ -66,4 +68,27 @@ input, button {
   color: white;
   border: none;
   cursor: pointer;
+}
+
+#cameraToggleBtn {
+  width: 48px;
+  height: 42px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.image-search-section {
+  display: none;
+  margin-bottom: 20px;
+  padding: 20px;
+}
+
+.image-drop-zone {
+  border: 2px dashed #666;
+  padding: 30px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 10px;
 }

@@ -25,6 +25,7 @@
     <div class="search-bar">
       <input id="searchInput" placeholder="Search..." />
       <button type="button" onclick="startVoiceSearch()">🎤</button>
+      <button type="button" id="cameraToggleBtn" onclick="toggleImageSearch()">📷</button>
       <input id="maxPrice" type="number" placeholder="Max $" />
       <button type="button" onclick="searchWebProducts()">Search</button>
     </div>
@@ -37,6 +38,21 @@
   </div>
 
   <div id="panel-products" class="panel active">
+    <div id="imageSearchSection" class="product-card image-search-section">
+      <h3>Find Similar Products from Image</h3>
+
+      <div id="imageDropZone" class="image-drop-zone">
+        Drag & drop an image here or click to upload
+      </div>
+
+      <input type="file" id="imageInput" accept="image/*" style="display: none;">
+      <div id="imagePreview" style="margin-top: 15px;"></div>
+
+      <button type="button" onclick="findSimilarProductsFromImage()" style="margin-top: 15px;">
+        Find Similar Products
+      </button>
+    </div>
+
     <div id="results"></div>
   </div>
 

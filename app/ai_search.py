@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from openai import OpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -66,6 +67,75 @@ Format:
     return parsed
 
 
+def parse_product_image(image_bytes, mime_type="image/jpeg"):
+    encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    prompt = """
+Analyze this image and identify the product for shopping search.
+
+Return ONLY valid JSON.
+
+Rules:
+- Identify the likely product shown in the image.
+- Keep the search query practical for shopping search.
+- Do not over-specify uncertain details.
+- If brand is unclear, leave it empty.
+- If gender is unclear, leave it empty.
+
+Format:
+{
+  "search_query": "",
+  "brand": "",
+  "gender": "",
+  "product_type": "",
+  "color": "",
+  "style": "",
+  "material": ""
+}
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You analyze product images and return shopping-friendly JSON only."
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{encoded_image}"
+                        }
+                    }
+                ]
+            }
+        ],
+        temperature=0
+    )
+
+    text = response.choices[0].message.content.strip()
+
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        parsed = {
+            "search_query": "",
+            "brand": "",
+            "gender": "",
+            "product_type": "",
+            "color": "",
+            "style": "",
+            "material": ""
+        }
+
+    print("OpenAI parsed image result:", parsed)
+    return parsed
+
+
 def compare_with_ai(products):
     prompt = f"""
 Compare these products and recommend the best overall option.
@@ -74,8 +144,8 @@ For each product, consider:
 - price
 - likely quality/value
 - brand/store trust
-- relevance
-- who it is best for
+- relevance to the product type
+- what kind of buyer it suits best
 
 Then provide:
 1. a short comparison
