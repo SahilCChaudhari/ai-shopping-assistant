@@ -1,5 +1,6 @@
 const BASE_URL = "";
 let activeTab = "products";
+let compareList = [];
 
 function switchTab(name) {
     activeTab = name;
@@ -19,86 +20,271 @@ function switchTab(name) {
     if (panel) panel.classList.add("active");
 }
 
+function getProductKey(product) {
+    return `${product.name}|${product.source}|${product.price}`;
+}
+
+function toggleCompareProduct(product) {
+    const key = getProductKey(product);
+    const existingIndex = compareList.findIndex(item => getProductKey(item) === key);
+
+    if (existingIndex !== -1) {
+        compareList.splice(existingIndex, 1);
+    } else {
+        if (compareList.length >= 4) {
+            alert("You can compare up to 4 products at a time.");
+            return;
+        }
+        compareList.push(product);
+    }
+
+    updateCompareBar();
+    rerenderCurrentResults();
+}
+
+let lastResultsData = null;
+
+function rerenderCurrentResults() {
+    if (lastResultsData) {
+        renderWebProducts(lastResultsData);
+    }
+}
+
+function updateCompareBar() {
+    const existing = document.getElementById("compareBar");
+    if (existing) {
+        existing.remove();
+    }
+
+    const resultsDiv = document.getElementById("results");
+    const bar = document.createElement("div");
+    bar.id = "compareBar";
+    bar.className = "product-card";
+    bar.style.marginBottom = "20px";
+    bar.style.padding = "16px";
+    bar.style.border = "1px solid #444";
+
+    const names = compareList.map(p => p.name).join(" vs ");
+
+    bar.innerHTML = `
+        <h3>Compare Products</h3>
+        <p><b>Selected:</b> ${compareList.length}/4</p>
+        <p>${names || "No products selected yet"}</p>
+    `;
+
+    const compareBtn = document.createElement("button");
+    compareBtn.textContent = "Compare Now";
+    compareBtn.disabled = compareList.length < 2;
+    compareBtn.onclick = compareSelectedProducts;
+
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear";
+    clearBtn.style.marginLeft = "10px";
+    clearBtn.onclick = () => {
+        compareList = [];
+        updateCompareBar();
+        rerenderCurrentResults();
+        clearComparisonResult();
+    };
+
+    bar.appendChild(compareBtn);
+    bar.appendChild(clearBtn);
+
+    resultsDiv.prepend(bar);
+}
+
+function clearComparisonResult() {
+    const existing = document.getElementById("comparisonResult");
+    if (existing) {
+        existing.remove();
+    }
+}
+
+function renderComparisonResult(data) {
+    clearComparisonResult();
+
+    const resultsDiv = document.getElementById("results");
+    const box = document.createElement("div");
+    box.id = "comparisonResult";
+    box.className = "product-card";
+    box.style.border = "2px solid #4f7cff";
+    box.style.padding = "20px";
+    box.style.marginBottom = "20px";
+
+    const productLines = (data.products || [])
+        .map((p, index) => `<p><b>Product ${index + 1}:</b> ${p.name}</p>`)
+        .join("");
+
+    box.innerHTML = `
+        <h2>AI Product Comparison</h2>
+        ${productLines}
+        <hr/>
+        <p style="white-space: pre-wrap;">${data.comparison || "No comparison available."}</p>
+    `;
+
+    const compareBar = document.getElementById("compareBar");
+    if (compareBar) {
+        compareBar.insertAdjacentElement("afterend", box);
+    } else {
+        resultsDiv.prepend(box);
+    }
+}
+
+async function compareSelectedProducts() {
+    if (compareList.length < 2 || compareList.length > 4) {
+        alert("Select between 2 and 4 products to compare.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${BASE_URL}/compare-products`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                products: compareList
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            alert(data.error || "Comparison failed");
+            return;
+        }
+
+        renderComparisonResult(data);
+    } catch (error) {
+        alert("Comparison failed");
+    }
+}
+
+function renderBestProduct(bestProduct) {
+    if (!bestProduct) return "";
+
+    return `
+        <div class="product-card" style="border: 2px solid gold; background: #fffbe6; color: #111; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h2>⭐ Best Overall Pick</h2>
+            <h3>${bestProduct.name || "No title"}</h3>
+            <p><b>Source:</b> ${bestProduct.source || "Web"}</p>
+            <p><b>Price:</b> ${bestProduct.price || "N/A"}</p>
+            <p>${bestProduct.description || ""}</p>
+            ${bestProduct.image ? `<img src="${bestProduct.image}" width="120" alt="product image">` : ""}
+            <br/>
+            ${bestProduct.link ? `<a href="${bestProduct.link}" target="_blank">View Product</a>` : ""}
+        </div>
+    `;
+}
+
+function renderProductCard(product) {
+    const card = document.createElement("div");
+    card.className = "product-card";
+
+    const isSelected = compareList.some(item => getProductKey(item) === getProductKey(product));
+
+    card.innerHTML = `
+        <h3>${product.name || "No title"}</h3>
+        <p><b>Source:</b> ${product.source || "Web"}</p>
+        <p><b>Price:</b> ${product.price || "N/A"}</p>
+        <p>${product.description || ""}</p>
+        ${product.image ? `<img src="${product.image}" width="120" alt="product image">` : ""}
+        <br/>
+        ${product.link ? `<a href="${product.link}" target="_blank">View Product</a>` : ""}
+    `;
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "btn-add";
+    addBtn.textContent = "Add to Cart";
+
+    addBtn.addEventListener("click", async () => {
+        addBtn.textContent = "Adding...";
+        addBtn.disabled = true;
+
+        try {
+            const response = await fetch(`${BASE_URL}/cart/add`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: product.name,
+                    price: product.price,
+                    description: product.description,
+                    category: product.source || "Web",
+                    quantity: 1
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                alert(result.error || "Failed to add item");
+                addBtn.textContent = "Add to Cart";
+                addBtn.disabled = false;
+                return;
+            }
+
+            addBtn.textContent = "✓ Added!";
+            updateCartCount();
+
+            setTimeout(() => {
+                addBtn.textContent = "Add to Cart";
+                addBtn.disabled = false;
+            }, 1500);
+        } catch (error) {
+            alert("Error adding to cart");
+            addBtn.textContent = "Add to Cart";
+            addBtn.disabled = false;
+        }
+    });
+
+    const compareBtn = document.createElement("button");
+    compareBtn.type = "button";
+    compareBtn.textContent = isSelected ? "Remove Compare" : "Compare";
+    compareBtn.style.marginLeft = "10px";
+    compareBtn.onclick = () => toggleCompareProduct(product);
+
+    card.appendChild(addBtn);
+    card.appendChild(compareBtn);
+    return card;
+}
+
 function renderWebProducts(data) {
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
 
-    if (!Array.isArray(data) || data.length === 0) {
-        resultsDiv.innerHTML = `<p>No web results found</p>`;
+    lastResultsData = data;
+
+    const products = data.products || [];
+    const bestProduct = data.best_product;
+
+    if (!Array.isArray(products) || products.length === 0) {
+        resultsDiv.innerHTML = `<p>No products found</p>`;
         return;
     }
 
-    data.forEach(product => {
-        const card = document.createElement("div");
-        card.className = "product-card";
+    if (bestProduct) {
+        resultsDiv.innerHTML += renderBestProduct(bestProduct);
+    }
 
-        card.innerHTML = `
-            <h3>${product.name || "No title"}</h3>
-            <p><b>Source:</b> ${product.source || "Web"}</p>
-            <p><b>Price:</b> ${product.price || "N/A"}</p>
-            <p>${product.description || ""}</p>
-            ${product.image ? `<img src="${product.image}" width="120" alt="product image">` : ""}
-            <br/>
-            ${product.link ? `<a href="${product.link}" target="_blank">View Product</a>` : ""}
-        `;
+    const summary = document.createElement("p");
+    summary.innerHTML = `<b>Showing ${products.length} result(s)</b>`;
+    resultsDiv.appendChild(summary);
 
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "btn-add";
-        btn.textContent = "Add to Cart";
-
-        btn.addEventListener("click", async () => {
-            btn.textContent = "Adding...";
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(`${BASE_URL}/cart/add`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        name: product.name,
-                        price: product.price,
-                        description: product.description,
-                        category: product.source || "Web",
-                        image: product.image,
-                        link: product.link,
-                        quantity: 1
-                    })
-                });
-
-                const result = await response.json();
-
-                if (!response.ok) {
-                    alert(result.error || "Failed to add item");
-                    btn.textContent = "Add to Cart";
-                    btn.disabled = false;
-                    return;
-                }
-
-                btn.textContent = "✓ Added!";
-                updateCartCount();
-
-                setTimeout(() => {
-                    btn.textContent = "Add to Cart";
-                    btn.disabled = false;
-                }, 1500);
-            } catch (error) {
-                alert("Error adding to cart");
-                btn.textContent = "Add to Cart";
-                btn.disabled = false;
-            }
-        });
-
-        card.appendChild(btn);
+    products.forEach(product => {
+        const card = renderProductCard(product);
         resultsDiv.appendChild(card);
     });
 
+    updateCompareBar();
     switchTab("products");
 }
 
 async function searchWebProducts() {
+    compareList = [];
+    clearComparisonResult();
+
     const keyword = document.getElementById("searchInput").value.trim();
-    const maxPrice = document.getElementById("maxPrice").value;
     const resultsDiv = document.getElementById("results");
 
     if (!keyword) {
@@ -109,20 +295,14 @@ async function searchWebProducts() {
     resultsDiv.innerHTML = `<p>Searching...</p>`;
 
     try {
-        const body = {
-            query: keyword
-        };
-
-        if (maxPrice) {
-            body.max_price = parseFloat(maxPrice);
-        }
-
         const response = await fetch(`${BASE_URL}/ai-search`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify({
+                query: keyword
+            })
         });
 
         const data = await response.json();
@@ -186,8 +366,6 @@ async function viewCart() {
                     <p><b>Quantity:</b> ${item.quantity}</p>
                     <p><b>Price:</b> $${item.product.price}</p>
                     <p>${item.product.description || ""}</p>
-                    ${item.product.image ? `<img src="${item.product.image}" width="120" alt="product image">` : ""}
-                    ${item.product.link ? `<p><a href="${item.product.link}" target="_blank">View Product</a></p>` : ""}
                 </div>
             `;
 
