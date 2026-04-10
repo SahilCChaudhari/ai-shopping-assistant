@@ -16,3 +16,4 @@ Werkzeug==3.1.7
 requests==2.32.3
 openai 
 stripe
+python-dotenv
