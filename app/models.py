@@ -58,6 +58,7 @@ class Order(db.Model):
     user_id = db.Column(db.Integer, nullable=False, default=1)
     total_amount = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(50), nullable=False, default='Placed')
+    stripe_session_id = db.Column(db.String(255), nullable=True)  # ← ADD THIS
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
