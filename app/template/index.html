@@ -42,7 +42,7 @@
               <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
             </svg>
           </span>
-          <input id="searchInput" type="text" placeholder="Search for anything…" />
+          <input id="searchInput" type="text" placeholder="Search for anything…" onkeydown="if(event.key==='Enter') searchWebProducts()" />
         </div>
         <button type="button" class="icon-btn" title="Voice Search" onclick="startVoiceSearch()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -60,8 +60,14 @@
         </button>
       </div>
 
+      <!-- ── GENDER FILTER ROW ── -->
       <div class="search-row">
-        <input id="maxPrice" type="number" class="price-input" placeholder="Max price $" />
+        <div class="gender-filter">
+          <button type="button" class="gender-btn active" data-gender="" onclick="setGender(this, '')">All</button>
+          <button type="button" class="gender-btn" data-gender="men" onclick="setGender(this, 'men')">Men</button>
+          <button type="button" class="gender-btn" data-gender="women" onclick="setGender(this, 'women')">Women</button>
+          <button type="button" class="gender-btn" data-gender="children" onclick="setGender(this, 'children')">Children</button>
+        </div>
         <button type="button" class="search-submit" onclick="searchWebProducts()">Search →</button>
       </div>
 
@@ -114,6 +120,46 @@
   <div class="loader-box">
     <div class="loader-ring"></div>
     <p class="loader-text" id="loaderText">Searching…</p>
+  </div>
+</div>
+
+<!-- ── CHATBOT ── -->
+<button class="chat-fab" id="chatFab" onclick="toggleChat()" title="Chat with AI Assistant">
+  <svg class="chat-fab-icon" id="chatIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+  <svg class="chat-fab-icon" id="closeIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+</button>
+
+<div class="chat-window" id="chatWindow">
+  <div class="chat-header">
+    <div class="chat-header-info">
+      <div class="chat-avatar">AC</div>
+      <div>
+        <p class="chat-name">AgentCommerce AI</p>
+        <p class="chat-status">● Online</p>
+      </div>
+    </div>
+    <button class="chat-clear" onclick="clearChat()" title="Clear chat">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+      </svg>
+    </button>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-bubble bot">
+      <p>Hi! I'm your AI shopping assistant 👋 Ask me anything — I can help you find products, compare prices, or answer questions!</p>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chatInput" class="chat-input" placeholder="Ask me anything…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
+    <button class="chat-send" onclick="sendChatMessage()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
   </div>
 </div>
 

@@ -4,6 +4,16 @@ let compareList = [];
 let lastResultsData = null;
 let selectedImageFile = null;
 
+// At the top with other variables, ADD:
+let selectedGender = "";
+
+// ADD this new function:
+function setGender(btn, gender) {
+  selectedGender = gender;
+  document.querySelectorAll(".gender-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
 /* ── LOADER ── */
 function showLoader(text = "Loading…") {
   const overlay = document.getElementById("loaderOverlay");
@@ -545,3 +555,114 @@ window.onload = function () {
   updateCartCount();
   setupImageDropZone();
 };
+
+/* ── CHATBOT ── */
+let chatHistory = [];
+
+function toggleChat() {
+  const win  = document.getElementById("chatWindow");
+  const fab  = document.getElementById("chatFab");
+  const chatIcon  = document.getElementById("chatIcon");
+  const closeIcon = document.getElementById("closeIcon");
+  const isOpen = win.classList.toggle("visible");
+  fab.classList.toggle("open", isOpen);
+  chatIcon.style.display  = isOpen ? "none"  : "block";
+  closeIcon.style.display = isOpen ? "block" : "none";
+  if (isOpen) document.getElementById("chatInput").focus();
+}
+
+function clearChat() {
+  chatHistory = [];
+  const msgs = document.getElementById("chatMessages");
+  msgs.innerHTML = `
+    <div class="chat-bubble bot">
+      <p>Hi! I'm your AI shopping assistant 👋 Ask me anything — I can help you find products, compare prices, or answer questions!</p>
+    </div>`;
+}
+
+function appendBubble(text, role) {
+  const msgs = document.getElementById("chatMessages");
+  const bubble = document.createElement("div");
+  bubble.className = `chat-bubble ${role}`;
+  bubble.innerHTML = `<p>${text}</p>`;
+  msgs.appendChild(bubble);
+  msgs.scrollTop = msgs.scrollHeight;
+  return bubble;
+}
+
+function showTyping() {
+  const msgs = document.getElementById("chatMessages");
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble typing";
+  bubble.id = "typingIndicator";
+  bubble.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div>`;
+  msgs.appendChild(bubble);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function hideTyping() {
+  const el = document.getElementById("typingIndicator");
+  if (el) el.remove();
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById("chatInput");
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value = "";
+  appendBubble(text, "user");
+  chatHistory.push({ role: "user", content: text });
+  showTyping();
+
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: chatHistory })
+    });
+    const data = await res.json();
+    hideTyping();
+    const reply = data.reply || "Sorry, I couldn't get a response.";
+    appendBubble(reply, "bot");
+    chatHistory.push({ role: "assistant", content: reply });
+  } catch {
+    hideTyping();
+    appendBubble("Something went wrong. Please try again.", "bot");
+  }
+}
+async function searchWebProducts() {
+  compareList = [];
+  clearComparisonResult();
+  const keyword    = document.getElementById("searchInput").value.trim();
+  const resultsDiv = document.getElementById("results");
+  if (!keyword) {
+    resultsDiv.innerHTML = `<div class="empty-state"><p>Please enter a search query.</p></div>`;
+    return;
+  }
+  resultsDiv.innerHTML = "";
+  showLoader("Searching for products…");
+
+  // Build query with gender appended if selected
+  const genderMap = { men: "men", women: "women", children: "kids" };
+  const genderSuffix = selectedGender ? ` ${genderMap[selectedGender] || selectedGender}` : "";
+  const fullQuery = keyword + genderSuffix;
+
+  try {
+    const res = await fetch(`${BASE_URL}/ai-search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: fullQuery })
+    });
+    const data = await res.json();
+    hideLoader();
+    if (!res.ok) {
+      resultsDiv.innerHTML = `<div class="empty-state"><p>${data.error || "Search failed"}</p></div>`;
+      return;
+    }
+    renderWebProducts(data);
+  } catch {
+    hideLoader();
+    resultsDiv.innerHTML = `<div class="empty-state"><p>Search failed. Please try again.</p></div>`;
+  }
+}
