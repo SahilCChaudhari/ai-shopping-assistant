@@ -345,6 +345,17 @@ def create_app():
         db.session.delete(item)
         db.session.commit()
         return jsonify({"message": "Item removed from cart"})
+    
+
+    @app.route('/order/confirm/<session_id>', methods=['GET'])
+    def confirm_order(session_id):
+        order = Order.query.filter_by(stripe_session_id=session_id).first()
+        if not order:
+            return jsonify({"error": "Order not found"}), 404
+        if order.status == "pending":
+            order.status = "paid"
+            db.session.commit()
+        return jsonify(order.to_dict())
 
     # ==================== CHECKOUT ROUTE ====================
 

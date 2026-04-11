@@ -175,7 +175,7 @@ function renderBestProduct(bestProduct) {
       <p><b>Source:</b> ${bestProduct.source || "Web"}</p>
       <p><b>Price:</b> ${bestProduct.price || "N/A"}</p>
       <p>${bestProduct.description || ""}</p>
-      ${bestProduct.image ? `<img src="${bestProduct.image}" width="120" alt="product image">` : ""}
+      ${bestProduct.image ? `<img src="${bestProduct.image}" width="120" alt="${bestProduct.name || 'product'}" onerror="this.style.display='none'">` : ""}
       ${bestProduct.link ? `<a href="${bestProduct.link}" target="_blank">View Product →</a>` : ""}
     </div>
   `;
@@ -206,7 +206,7 @@ function renderProductCard(product) {
     <h3>${product.name || "No title"}</h3>
     <p><b>Source:</b> ${product.source || "Web"} &nbsp; <b>Price:</b> ${product.price || "N/A"}</p>
     <p>${product.description || ""}</p>
-    ${product.image ? `<img src="${product.image}" width="120" alt="product image">` : ""}
+    ${product.image ? `<img src="${product.image}" width="120" alt="${product.name || 'product'}" onerror="this.style.display='none'">` : ""}
     ${product.link ? `<a href="${product.link}" target="_blank">View Product →</a>` : ""}
   `;
 
@@ -297,12 +297,23 @@ async function searchWebProducts() {
   }
   resultsDiv.innerHTML = "";
   showLoader("Searching for products…");
+
+  const genderMap = { men: "men", women: "women", children: "kids" };
+  const genderSuffix = selectedGender ? ` ${genderMap[selectedGender] || selectedGender}` : "";
+  const fullQuery = keyword + genderSuffix;
+
+  // ── TIMEOUT SETUP ──
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000); // 20 seconds
+
   try {
     const res = await fetch(`${BASE_URL}/ai-search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: keyword })
+      body: JSON.stringify({ query: fullQuery }),
+      signal: controller.signal  // ← attach abort signal
     });
+    clearTimeout(timeout);  // ← clear timer if response came back
     const data = await res.json();
     hideLoader();
     if (!res.ok) {
@@ -310,9 +321,14 @@ async function searchWebProducts() {
       return;
     }
     renderWebProducts(data);
-  } catch {
+  } catch (err) {
+    clearTimeout(timeout);
     hideLoader();
-    resultsDiv.innerHTML = `<div class="empty-state"><p>Search failed. Please try again.</p></div>`;
+    if (err.name === "AbortError") {
+      resultsDiv.innerHTML = `<div class="empty-state"><p>Search timed out. Please try again.</p></div>`;
+    } else {
+      resultsDiv.innerHTML = `<div class="empty-state"><p>Search failed. Please try again.</p></div>`;
+    }
   }
 }
 
@@ -462,24 +478,8 @@ async function removeFromCart(productId) {
   }
 }
 
-// async function checkout() {
-//   showLoader("Placing your order…");
-//   try {
-//     const res  = await fetch(`${BASE_URL}/checkout`, { method: "POST" });
-//     const data = await res.json();
-//     hideLoader();
-//     if (!res.ok) { alert(data.message || "Checkout failed"); return; }
-//     alert(`✅ Order placed! Order ID: ${data.order_id}`);
-//     document.getElementById("orderIdInput").value = data.order_id;
-//     updateCartCount();
-//     switchTab("track");
-//   } catch {
-//     hideLoader();
-//     alert("Checkout failed");
-//   }
-// }
-
 async function checkout() {
+    showLoader("Initiating payment…");  // ← add this
     try {
         const response = await fetch(`${BASE_URL}/checkout`, {
             method: "POST",
@@ -488,25 +488,57 @@ async function checkout() {
         const data = await response.json();
 
         if (!response.ok) {
+            hideLoader();  // ← add this
             alert(data.error || "Checkout failed");
             return;
         }
 
         if (data.mode === "mock") {
-            // Mock success - show confirmation
+            hideLoader();  // ← add this
             alert(`✅ Order placed! Order ID: ${data.order_id}`);
             document.getElementById("orderIdInput").value = data.order_id;
             updateCartCount();
             switchTab("track");
         } else if (data.mode === "stripe") {
-            // Redirect to Stripe's secure hosted checkout
+            // Keep loader showing while redirecting to Stripe
+            loaderText.textContent = "Redirecting to Stripe…";  // ← add this
             window.location.href = data.checkout_url;
         }
     } catch (error) {
+        hideLoader();  // ← add this
         console.error("Checkout error:", error);
         alert("Checkout failed. Please try again.");
     }
 }
+
+// async function checkout() {
+//     try {
+//         const response = await fetch(`${BASE_URL}/checkout`, {
+//             method: "POST",
+//             headers: { "Content-Type": "application/json" }
+//         });
+//         const data = await response.json();
+
+//         if (!response.ok) {
+//             alert(data.error || "Checkout failed");
+//             return;
+//         }
+
+//         if (data.mode === "mock") {
+//             // Mock success - show confirmation
+//             alert(`✅ Order placed! Order ID: ${data.order_id}`);
+//             document.getElementById("orderIdInput").value = data.order_id;
+//             updateCartCount();
+//             switchTab("track");
+//         } else if (data.mode === "stripe") {
+//             // Redirect to Stripe's secure hosted checkout
+//             window.location.href = data.checkout_url;
+//         }
+//     } catch (error) {
+//         console.error("Checkout error:", error);
+//         alert("Checkout failed. Please try again.");
+//     }
+// }
 
 /* ── ORDER TRACKING ── */
 async function trackOrder() {
@@ -555,6 +587,35 @@ window.onload = function () {
   updateCartCount();
   setupImageDropZone();
 };
+
+ // ── Handle Stripe redirect back ──
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get("order_id"); // Stripe puts CHECKOUT_SESSION_ID here
+
+  if (sessionId) {
+    // Confirm and update order status
+    fetch(`${BASE_URL}/order/confirm/${sessionId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) {
+          document.getElementById("orderIdInput").value = data.id;
+          document.getElementById("orderStatus").innerHTML = `
+            <div class="status-card">
+              <div class="status-badge">● ${data.status}</div>
+              <p><b>Order ID:</b> ${data.id}</p>
+              <p><b>Total:</b> $${data.total_amount}</p>
+              <p><b>Placed:</b> ${data.created_at}</p>
+            </div>
+          `;
+          switchTab("track");
+          updateCartCount();
+          // Clean up URL
+          window.history.replaceState({}, document.title, "/");
+        }
+      })
+      .catch(err => console.error("Order confirm error:", err));
+  }
+
 
 /* ── CHATBOT ── */
 let chatHistory = [];
