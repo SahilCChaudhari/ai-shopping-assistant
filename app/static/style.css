@@ -1153,6 +1153,25 @@ header {
   flex: 1;
 }
 
+/* ── ORDER ITEMS ── */
+.order-items {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--cream-3);
+  padding-top: 1rem;
+}
+
+.order-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--cream-2);
+}
+
+.order-item-row:last-child {
+  border-bottom: none;
+}
+
 .gender-btn {
   flex: 1;
   padding: .6rem .75rem;

@@ -58,7 +58,7 @@ class Order(db.Model):
     user_id = db.Column(db.Integer, nullable=False, default=1)
     total_amount = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(50), nullable=False, default='Placed')
-    stripe_session_id = db.Column(db.String(255), nullable=True)  # ← ADD THIS
+    stripe_session_id = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -67,11 +67,56 @@ class Order(db.Model):
             "user_id": self.user_id,
             "total_amount": self.total_amount,
             "status": self.status,
-            "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "items": [item.to_dict() for item in self.items] if self.items else []
         }
 
 
 class OrderItem(db.Model):
+    __tablename__ = 'order_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+
+    order = db.relationship('Order', backref='items')
+    product = db.relationship('Product')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "order_id": self.order_id,
+            "product_id": self.product_id,
+            "product_name": self.product.name if self.product else "Unknown",  # ← ADD THIS
+            "quantity": self.quantity,
+            "price": self.price,
+            "product": self.product.to_dict() if self.product else None
+        }
+
+
+# class Order(db.Model):
+#     __tablename__ = 'orders'
+
+#     id = db.Column(db.Integer, primary_key=True)
+#     user_id = db.Column(db.Integer, nullable=False, default=1)
+#     total_amount = db.Column(db.Float, nullable=False)
+#     status = db.Column(db.String(50), nullable=False, default='Placed')
+#     stripe_session_id = db.Column(db.String(255), nullable=True)  # ← ADD THIS
+#     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+#     def to_dict(self):
+#         return {
+#             "id": self.id,
+#             "user_id": self.user_id,
+#             "total_amount": self.total_amount,
+#             "status": self.status,
+#             "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+#         }
+
+
+# class OrderItem(db.Model):
     __tablename__ = 'order_items'
 
     id = db.Column(db.Integer, primary_key=True)
